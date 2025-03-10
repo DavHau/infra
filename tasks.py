@@ -15,6 +15,31 @@ os.chdir(ROOT)
 
 
 @task
+def redeploykeys(c: Any, hosts: str) -> None:
+    g = DeployGroup(get_hosts(hosts))
+
+    def deploy(h: DeployHost) -> None:
+        with TemporaryDirectory() as tmpdir:
+            hostname = h.host.replace(".nix-community.org", "")
+            flake_attr = hostname
+            dir = "/var/lib/ssh_secrets"
+            decrypt_host_key(flake_attr, tmpdir)
+            h.run(f"sudo rm -rfv {dir}")
+            h.run(f"sudo mkdir -pv {dir}")
+            h.run_local(
+                f"cat {tmpdir}{dir}/ssh_host_ed25519_key | ssh {h.host} 'sudo tee {dir}/ssh_host_ed25519_key'"
+            )
+            h.run_local(
+                f"cat {tmpdir}{dir}/initrd_host_ed25519_key | ssh {h.host} 'sudo tee {dir}/initrd_host_ed25519_key'"
+            )
+            h.run(f"sudo chown root:root {dir}/*")
+            h.run(f"sudo chmod 400 {dir}/*")
+            h.run(f"stat -c '%a %U %G %n' {dir}/*")
+
+    g.run_function(deploy)
+
+
+@task
 def deploy(c: Any, hosts: str) -> None:
     """
     Use inv deploy --hosts build01,darwin01
